@@ -21,27 +21,27 @@ jobs:
       - name: Configure CMake for iOS
         run: |
           BOOST_PREFIX=$(brew --prefix boost)
-          BOOST_CMAKE_DIR=$(find "$BOOST_PREFIX/lib/cmake" -maxdepth 2 -name "BoostConfig.cmake" -exec dirname {} \; | head -n 1)
-          
           echo "Boost prefix: $BOOST_PREFIX"
-          echo "Boost CMake dir: $BOOST_CMAKE_DIR"
+          
           sed -i '' 's/1.81 EXACT//g' CMakeLists.txt || true
           sed -i '' 's/1.81//g' CMakeLists.txt || true
+
           cmake \
             -S . \
             -B build \
             -G Xcode \
-            -DCMAKE_POLICY_DEFAULT_CMP0144=NEW \
-            -DCMAKE_POLICY_DEFAULT_CMP0167=OLD \
             -DCMAKE_SYSTEM_NAME=iOS \
             -DCMAKE_OSX_SYSROOT=iphoneos \
             -DCMAKE_OSX_ARCHITECTURES="arm64" \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 \
-            -DBoost_ROOT="$BOOST_PREFIX" \
-            -DBoost_DIR="$BOOST_CMAKE_DIR" \
-            -DCMAKE_PREFIX_PATH="$BOOST_PREFIX;$BOOST_CMAKE_DIR" \
-            -DBoost_NO_WARN_NEW_VERSIONS=ON \
-            -DBoost_COMPAT_VERSION=OFF
+            -DCMAKE_FIND_ROOT_PATH="$BOOST_PREFIX" \
+            -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH \
+            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH \
+            -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=BOTH \
+            -DCMAKE_PREFIX_PATH="$BOOST_PREFIX;$BOOST_PREFIX/lib/cmake;$BOOST_PREFIX/lib/cmake/Boost-1.92.0" \
+            -DBoost_INCLUDE_DIR="$BOOST_PREFIX/include" \
+            -DBOOST_INCLUDEDIR="$BOOST_PREFIX/include" \
+            -DBoost_NO_SYSTEM_PATHS=OFF
 
       - name: Compile with Xcode
         run: |
