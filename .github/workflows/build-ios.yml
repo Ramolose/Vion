@@ -15,22 +15,25 @@ jobs:
 
       - name: Setup Git and Fetch Submodules
         run: |
-          # Forcer HTTPS pour tous les sous-modules
           git config --global url."https://github.com/".insteadOf git://github.com/
           git config --global url."https://github.com/".insteadOf git@github.com:
           
-          # Initialisation pas à pas pour ne pas interrompre le job si un sous-module secondaire échoue
           git submodule sync --recursive
           git submodule update --init --recursive || true
 
-      - name: Patch Submodule Checks and Boost
+      - name: Patch Submodules, Capstone and Boost
         run: |
-          # Neutraliser l'arrêt forcé de check_submodules_present dans external/CMakeLists.txt
+          # 1. Neutraliser l'arrêt forcé de check_submodules_present
           if [ -f "external/CMakeLists.txt" ]; then
             sed -i '' 's/check_submodules_present(/# check_submodules_present(/g' external/CMakeLists.txt || true
           fi
 
-          # Neutraliser les versions rigides de Boost dans CMakeLists.txt
+          # 2. Corriger le bug de syntaxe de Capstone (CPackConfig.txt)
+          if [ -f "external/capstone/CPackConfig.txt" ]; then
+            sed -i '' 's/\${CMAKE_SYSTEM_PROCESSOR}/"\${CMAKE_SYSTEM_PROCESSOR}"/g' external/capstone/CPackConfig.txt || true
+          fi
+
+          # 3. Neutraliser les contraintes de version stricte de Boost
           sed -i '' 's/1.81 EXACT//g' CMakeLists.txt || true
           sed -i '' 's/1.81//g' CMakeLists.txt || true
 
@@ -50,7 +53,10 @@ jobs:
             -DCMAKE_SYSTEM_NAME=iOS \
             -DCMAKE_OSX_SYSROOT=iphoneos \
             -DCMAKE_OSX_ARCHITECTURES="arm64" \
+            -DCMAKE_SYSTEM_PROCESSOR="arm64" \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 \
+            -DCAPSTONE_BUILD_TESTS=OFF \
+            -DCAPSTONE_BUILD_PACKAGES=OFF \
             -DCMAKE_FIND_ROOT_PATH="$BOOST_PREFIX" \
             -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH \
             -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH \
@@ -65,10 +71,8 @@ jobs:
           PROJECT_FILE=$(find build -maxdepth 2 -name "*.xcodeproj" | head -n 1)
           echo "Projet trouvé : $PROJECT_FILE"
 
-          # Liste les schemes disponibles
           xcodebuild -project "$PROJECT_FILE" -list
 
-          # Sélectionne le scheme principal (Vion ou Vita3K)
           SCHEME_NAME=$(xcodebuild -project "$PROJECT_FILE" -list | awk '/Schemes:/{flag=1;next}/^$/{flag=0}flag' | tr -d ' ' | grep -E 'Vion|Vita3K' | head -n 1)
           
           if [ -z "$SCHEME_NAME" ]; then
@@ -92,7 +96,7 @@ jobs:
           APP_PATH=$(find derived_data -name "*.app" -type d | head -n 1)
 
           if [ -z "$APP_PATH" ]; then
-            echo "Erreur : Aucun bundle .app n'a été produit par la compilation."
+            echo "Erreur : Aucun bundle .app n'a été produit."
             exit 1
           fi
 
