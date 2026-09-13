@@ -16,10 +16,13 @@ jobs:
 
       - name: Install build tools
         run: |
-          brew install cmake ninja
+          brew install cmake ninja boost
 
       - name: Configure CMake for iOS
         run: |
+          BOOST_PREFIX=$(brew --prefix boost)
+          echo "Boost prefix: $BOOST_PREFIX"
+
           cmake \
             -S . \
             -B build \
@@ -27,7 +30,11 @@ jobs:
             -DCMAKE_SYSTEM_NAME=iOS \
             -DCMAKE_OSX_SYSROOT=iphoneos \
             -DCMAKE_OSX_ARCHITECTURES="arm64" \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 \
+            -DBOOST_ROOT="$BOOST_PREFIX" \
+            -DBoost_DIR="$BOOST_PREFIX/lib/cmake/Boost-*" \
+            -DCMAKE_PREFIX_PATH="$BOOST_PREFIX" \
+            -DUSE_CUSTOM_BOOST=OFF
 
       - name: Compile with Xcode
         run: |
