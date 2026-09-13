@@ -53,6 +53,13 @@ jobs:
           BOOST_PREFIX=$(brew --prefix boost)
           echo "Boost prefix: $BOOST_PREFIX"
 
+          # Utiliser le python3 natif de Xcode/macOS plutôt que le 3.14 instable de Homebrew
+          SYSTEM_PYTHON=$(which python3)
+          if [ -f "/usr/bin/python3" ]; then
+            SYSTEM_PYTHON="/usr/bin/python3"
+          fi
+          echo "Python ciblé: $SYSTEM_PYTHON"
+
           cmake \
             -S . \
             -B build \
@@ -62,6 +69,8 @@ jobs:
             -DCMAKE_OSX_ARCHITECTURES="arm64" \
             -DCMAKE_SYSTEM_PROCESSOR="arm64" \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 \
+            -DPython3_EXECUTABLE="$SYSTEM_PYTHON" \
+            -DPYTHON_EXECUTABLE="$SYSTEM_PYTHON" \
             -DCAPSTONE_BUILD_TESTS=OFF \
             -DCAPSTONE_BUILD_PACKAGES=OFF \
             -DCMAKE_FIND_ROOT_PATH="$BOOST_PREFIX" \
@@ -71,7 +80,8 @@ jobs:
             -DCMAKE_PREFIX_PATH="$BOOST_PREFIX;$BOOST_PREFIX/lib/cmake;$BOOST_PREFIX/lib/cmake/Boost-1.92.0" \
             -DBoost_INCLUDE_DIR="$BOOST_PREFIX/include" \
             -DBOOST_INCLUDEDIR="$BOOST_PREFIX/include" \
-            -DBoost_NO_SYSTEM_PATHS=OFF
+            -DBoost_NO_SYSTEM_PATHS=OFF \
+            --log-level=STATUS
 
       - name: Compile with Xcode
         run: |
