@@ -14,7 +14,12 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Install build tools
+      - name: Force update all submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive --force
+
+      - name: Install build tools and Boost
         run: |
           brew install cmake ninja boost
 
@@ -22,7 +27,8 @@ jobs:
         run: |
           BOOST_PREFIX=$(brew --prefix boost)
           echo "Boost prefix: $BOOST_PREFIX"
-          
+
+          # Patch des contraintes de version stricte de Boost dans CMakeLists
           sed -i '' 's/1.81 EXACT//g' CMakeLists.txt || true
           sed -i '' 's/1.81//g' CMakeLists.txt || true
 
@@ -45,10 +51,16 @@ jobs:
 
       - name: Compile with Xcode
         run: |
-          # Compilation du projet sans exiger de compte développeur payant
+          PROJECT_FILE=$(find build -maxdepth 2 -name "*.xcodeproj" | head -n 1)
+          echo "Projet Xcode détecté : $PROJECT_FILE"
+
+          # Récupération automatique du scheme principal
+          SCHEME_NAME=$(xcodebuild -project "$PROJECT_FILE" -list | awk '/Schemes:/{flag=1;next}/^$/{flag=0}flag' | tr -d ' ' | head -n 1)
+          echo "Scheme ciblé : $SCHEME_NAME"
+
           xcodebuild build \
-            -project $(find build -maxdepth 2 -name "*.xcodeproj" | head -n 1) \
-            -scheme Vion \
+            -project "$PROJECT_FILE" \
+            -scheme "$SCHEME_NAME" \
             -configuration Release \
             -destination "generic/platform=iOS" \
             -derivedDataPath derived_data \
@@ -58,15 +70,14 @@ jobs:
 
       - name: Package to IPA
         run: |
-          # Localise le dossier .app généré
           APP_PATH=$(find derived_data -name "*.app" -type d | head -n 1)
-          
+
           if [ -z "$APP_PATH" ]; then
             echo "Erreur : Aucun fichier .app n'a été trouvé."
             exit 1
           fi
 
-          echo "App trouvée : $APP_PATH"
+          echo "Application trouvée : $APP_PATH"
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
           zip -r Vion.ipa Payload
