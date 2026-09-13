@@ -25,7 +25,8 @@ jobs:
           
           echo "Boost prefix: $BOOST_PREFIX"
           echo "Boost CMake dir: $BOOST_CMAKE_DIR"
-
+          sed -i '' 's/1.81 EXACT//g' CMakeLists.txt || true
+          sed -i '' 's/1.81//g' CMakeLists.txt || true
           cmake \
             -S . \
             -B build \
