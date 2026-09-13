@@ -8,31 +8,33 @@ jobs:
     runs-on: macos-14
 
     steps:
-      - name: Checkout source
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Force fetch all submodules
+      - name: Setup Git and Fetch Submodules
         run: |
-          # Convertir toute URL git:// ou SSH résiduelle en https://
+          # Forcer HTTPS pour tous les sous-modules
           git config --global url."https://github.com/".insteadOf git://github.com/
           git config --global url."https://github.com/".insteadOf git@github.com:
-
+          
+          # Initialisation pas à pas pour ne pas interrompre le job si un sous-module secondaire échoue
           git submodule sync --recursive
-          git submodule update --init --recursive --force || true
+          git submodule update --init --recursive || true
 
-      - name: Patch CMake submodule checks
+      - name: Patch Submodule Checks and Boost
         run: |
-          # Désactive radicalement l'interruption CMake sur les sous-modules manquants
+          # Neutraliser l'arrêt forcé de check_submodules_present dans external/CMakeLists.txt
           if [ -f "external/CMakeLists.txt" ]; then
-            echo "Neutralisation de check_submodules_present..."
-            sed -i '' 's/function(check_submodules_present/function(check_submodules_present_disabled/g' external/CMakeLists.txt
-            # On remplace la fonction par un corps vide qui ne fait rien
-            printf "\nfunction(check_submodules_present)\nendfunction()\n" >> external/CMakeLists.txt
+            sed -i '' 's/check_submodules_present(/# check_submodules_present(/g' external/CMakeLists.txt || true
           fi
 
-      - name: Install build tools and Boost
+          # Neutraliser les versions rigides de Boost dans CMakeLists.txt
+          sed -i '' 's/1.81 EXACT//g' CMakeLists.txt || true
+          sed -i '' 's/1.81//g' CMakeLists.txt || true
+
+      - name: Install Build Dependencies
         run: |
           brew install cmake ninja boost
 
@@ -40,10 +42,6 @@ jobs:
         run: |
           BOOST_PREFIX=$(brew --prefix boost)
           echo "Boost prefix: $BOOST_PREFIX"
-
-          # Patch des versions de Boost codées en dur
-          sed -i '' 's/1.81 EXACT//g' CMakeLists.txt || true
-          sed -i '' 's/1.81//g' CMakeLists.txt || true
 
           cmake \
             -S . \
@@ -65,10 +63,19 @@ jobs:
       - name: Compile with Xcode
         run: |
           PROJECT_FILE=$(find build -maxdepth 2 -name "*.xcodeproj" | head -n 1)
-          echo "Projet Xcode détecté : $PROJECT_FILE"
+          echo "Projet trouvé : $PROJECT_FILE"
 
-          SCHEME_NAME=$(xcodebuild -project "$PROJECT_FILE" -list | awk '/Schemes:/{flag=1;next}/^$/{flag=0}flag' | tr -d ' ' | head -n 1)
-          echo "Scheme ciblé : $SCHEME_NAME"
+          # Liste les schemes disponibles
+          xcodebuild -project "$PROJECT_FILE" -list
+
+          # Sélectionne le scheme principal (Vion ou Vita3K)
+          SCHEME_NAME=$(xcodebuild -project "$PROJECT_FILE" -list | awk '/Schemes:/{flag=1;next}/^$/{flag=0}flag' | tr -d ' ' | grep -E 'Vion|Vita3K' | head -n 1)
+          
+          if [ -z "$SCHEME_NAME" ]; then
+            SCHEME_NAME=$(xcodebuild -project "$PROJECT_FILE" -list | awk '/Schemes:/{flag=1;next}/^$/{flag=0}flag' | tr -d ' ' | head -n 1)
+          fi
+
+          echo "Compilation du scheme : $SCHEME_NAME"
 
           xcodebuild build \
             -project "$PROJECT_FILE" \
@@ -80,16 +87,16 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
 
-      - name: Package to IPA
+      - name: Package IPA
         run: |
           APP_PATH=$(find derived_data -name "*.app" -type d | head -n 1)
 
           if [ -z "$APP_PATH" ]; then
-            echo "Erreur : Aucun fichier .app n'a été trouvé."
+            echo "Erreur : Aucun bundle .app n'a été produit par la compilation."
             exit 1
           fi
 
-          echo "Application trouvée : $APP_PATH"
+          echo "Bundle trouvé : $APP_PATH"
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
           zip -r Vion.ipa Payload
