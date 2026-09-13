@@ -21,20 +21,26 @@ jobs:
       - name: Configure CMake for iOS
         run: |
           BOOST_PREFIX=$(brew --prefix boost)
+          BOOST_CMAKE_DIR=$(find "$BOOST_PREFIX/lib/cmake" -maxdepth 2 -name "BoostConfig.cmake" -exec dirname {} \; | head -n 1)
+          
           echo "Boost prefix: $BOOST_PREFIX"
+          echo "Boost CMake dir: $BOOST_CMAKE_DIR"
 
           cmake \
             -S . \
             -B build \
             -G Xcode \
+            -DCMAKE_POLICY_DEFAULT_CMP0144=NEW \
+            -DCMAKE_POLICY_DEFAULT_CMP0167=OLD \
             -DCMAKE_SYSTEM_NAME=iOS \
             -DCMAKE_OSX_SYSROOT=iphoneos \
             -DCMAKE_OSX_ARCHITECTURES="arm64" \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 \
-            -DBOOST_ROOT="$BOOST_PREFIX" \
-            -DBoost_DIR="$BOOST_PREFIX/lib/cmake/Boost-*" \
-            -DCMAKE_PREFIX_PATH="$BOOST_PREFIX" \
-            -DUSE_CUSTOM_BOOST=OFF
+            -DBoost_ROOT="$BOOST_PREFIX" \
+            -DBoost_DIR="$BOOST_CMAKE_DIR" \
+            -DCMAKE_PREFIX_PATH="$BOOST_PREFIX;$BOOST_CMAKE_DIR" \
+            -DBoost_NO_WARN_NEW_VERSIONS=ON \
+            -DBoost_COMPAT_VERSION=OFF
 
       - name: Compile with Xcode
         run: |
