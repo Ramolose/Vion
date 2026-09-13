@@ -1,0 +1,69 @@
+name: Build Vion iOS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Show environment
+        run: |
+          echo "=== macOS ==="
+          sw_vers
+
+          echo "=== Xcode ==="
+          xcodebuild -version
+
+          echo "=== Repository files ==="
+          ls -la
+
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install cmake ninja
+
+      - name: Show project structure
+        run: |
+          echo "=== Root files ==="
+          find . -maxdepth 2 -type f | sort | head -200
+
+          echo "=== CMake files ==="
+          find . -name "CMakeLists.txt"
+
+      - name: Generate Xcode project
+        run: |
+          cmake \
+            -S . \
+            -B build/ios \
+            -G Xcode \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0
+
+      - name: Inspect generated project
+        if: always()
+        run: |
+          echo "=== Build directory ==="
+          find build -maxdepth 4 -print || true
+
+          echo "=== Xcode projects ==="
+          find build -name "*.xcodeproj" -print || true
+
+          echo "=== Schemes ==="
+          find build -path "*xcschemes*" -print || true
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-files
+          path: |
+            build
