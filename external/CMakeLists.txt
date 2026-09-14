@@ -142,6 +142,25 @@ if(APPLE AND IOS)
 	set(UNICORN_INTERPRETER ON)
 	add_subdirectory(unicorn EXCLUDE_FROM_ALL)
 
+	# unicorn's own CMakeLists.txt shells out to qemu/configure to generate
+	# config-host.h/config-target.h, but never checks whether that script
+	# actually succeeded. When it silently fails (e.g. under an iOS SDK
+	# sysroot it was never designed for), every target ends up missing
+	# generated headers, surfacing later as confusing compile errors deep
+	# in the Xcode build log (which is too large to retrieve in full).
+	# Fail fast here instead, at configure time, and dump qemu's own
+	# config.log so the real failure is visible in the much smaller
+	# "Configure CMake for iOS" step output.
+	if(NOT EXISTS "${CMAKE_BINARY_DIR}/arm-softmmu/config-target.mak")
+		set(_qemu_configure_log "${CMAKE_BINARY_DIR}/config.log")
+		if(EXISTS "${_qemu_configure_log}")
+			file(READ "${_qemu_configure_log}" _qemu_configure_log_content)
+			message(FATAL_ERROR "unicorn's qemu/configure did not produce arm-softmmu/config-target.mak. Its config.log:\n${_qemu_configure_log_content}")
+		else()
+			message(FATAL_ERROR "unicorn's qemu/configure did not produce arm-softmmu/config-target.mak, and ${_qemu_configure_log} does not exist either - qemu/configure likely never ran.")
+		endif()
+	endif()
+
 	# unicorn/qemu/include/qemu/int128.h only guards its struct-based Int128
 	# fallback (which redefines __int128_t) against MSVC+clang-cl; it doesn't
 	# account for plain Apple Clang, which natively provides __int128_t on
