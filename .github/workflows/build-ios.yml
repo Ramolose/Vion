@@ -38,12 +38,22 @@ jobs:
           SYSTEM_PYTHON="/usr/bin/python3"
           echo "Python cible : $SYSTEM_PYTHON"
 
+          # Resolve the actual SDK path rather than passing the bare SDK name
+          # "iphoneos": the Xcode generator can resolve a short name on its own,
+          # but external/unicorn's CMakeLists.txt forwards ${CMAKE_OSX_SYSROOT}
+          # verbatim to `clang -isysroot` inside a raw qemu/configure shell
+          # invocation, which needs a real directory ("no such sysroot
+          # directory: 'iphoneos'" otherwise, cascading into every platform
+          # detection check in that script failing).
+          IPHONEOS_SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+          echo "iphoneos SDK path: $IPHONEOS_SDK_PATH"
+
           cmake \
             -S . \
             -B build \
             -G Xcode \
             -DCMAKE_SYSTEM_NAME=iOS \
-            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_OSX_SYSROOT="$IPHONEOS_SDK_PATH" \
             -DCMAKE_OSX_ARCHITECTURES="arm64" \
             -DCMAKE_SYSTEM_PROCESSOR="arm64" \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 \
