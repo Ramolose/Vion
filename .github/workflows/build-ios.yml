@@ -12,37 +12,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Setup Git and Fetch Submodules
-        run: |
-          git config --global url."https://github.com/".insteadOf git://github.com/
-          git config --global url."https://github.com/".insteadOf git@github.com:
-          
-          git submodule sync --recursive
-          git submodule update --init --recursive || true
-
-      - name: Patch Submodules, Capstone and Boost
-        run: |
-          # 1. Neutraliser check_submodules_present
-          if [ -f "external/CMakeLists.txt" ]; then
-            sed -i '' 's/check_submodules_present(/# check_submodules_present(/g' external/CMakeLists.txt || true
-            
-            # Neutraliser les add_subdirectory manquants
-            sed -i '' 's/add_subdirectory(unicorn)/# add_subdirectory(unicorn)/g' external/CMakeLists.txt || true
-            sed -i '' 's/add_subdirectory(ffmpeg-ios)/# add_subdirectory(ffmpeg-ios)/g' external/CMakeLists.txt || true
-          fi
-
-          # Créer les dossiers pour éviter les erreurs d'inclusion
-          mkdir -p external/unicorn external/ffmpeg-ios
-
-          # 2. Corriger le bug de syntaxe de Capstone
-          if [ -f "external/capstone/CPackConfig.txt" ]; then
-            sed -i '' 's/\${CMAKE_SYSTEM_PROCESSOR}/"\${CMAKE_SYSTEM_PROCESSOR}"/g' external/capstone/CPackConfig.txt || true
-          fi
-
-          # 3. Neutraliser les contraintes de version Boost
-          sed -i '' 's/1.81 EXACT//g' CMakeLists.txt || true
-          sed -i '' 's/1.81//g' CMakeLists.txt || true
+          submodules: recursive
 
       - name: Install Build Dependencies
         run: |
@@ -53,12 +23,10 @@ jobs:
           BOOST_PREFIX=$(brew --prefix boost)
           echo "Boost prefix: $BOOST_PREFIX"
 
-          # Utiliser le python3 natif de Xcode/macOS plutôt que le 3.14 instable de Homebrew
-          SYSTEM_PYTHON=$(which python3)
-          if [ -f "/usr/bin/python3" ]; then
-            SYSTEM_PYTHON="/usr/bin/python3"
-          fi
-          echo "Python ciblé: $SYSTEM_PYTHON"
+          # Use the system python3 shipped with Xcode/macOS rather than Homebrew's,
+          # since the CMake Python3 module can pick up an incompatible Homebrew build.
+          SYSTEM_PYTHON="/usr/bin/python3"
+          echo "Python cible : $SYSTEM_PYTHON"
 
           cmake \
             -S . \
@@ -77,7 +45,7 @@ jobs:
             -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH \
             -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH \
             -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=BOTH \
-            -DCMAKE_PREFIX_PATH="$BOOST_PREFIX;$BOOST_PREFIX/lib/cmake;$BOOST_PREFIX/lib/cmake/Boost-1.92.0" \
+            -DCMAKE_PREFIX_PATH="$BOOST_PREFIX" \
             -DBoost_INCLUDE_DIR="$BOOST_PREFIX/include" \
             -DBOOST_INCLUDEDIR="$BOOST_PREFIX/include" \
             -DBoost_NO_SYSTEM_PATHS=OFF \
@@ -86,15 +54,12 @@ jobs:
       - name: Compile with Xcode
         run: |
           PROJECT_FILE=$(find build -maxdepth 2 -name "*.xcodeproj" | head -n 1)
-          echo "Projet trouvé : $PROJECT_FILE"
+          echo "Projet trouve : $PROJECT_FILE"
 
           xcodebuild -project "$PROJECT_FILE" -list
 
-          SCHEME_NAME=$(xcodebuild -project "$PROJECT_FILE" -list | awk '/Schemes:/{flag=1;next}/^$/{flag=0}flag' | tr -d ' ' | grep -E 'Vion|Vita3K' | head -n 1)
-          
-          if [ -z "$SCHEME_NAME" ]; then
-            SCHEME_NAME=$(xcodebuild -project "$PROJECT_FILE" -list | awk '/Schemes:/{flag=1;next}/^$/{flag=0}flag' | tr -d ' ' | head -n 1)
-          fi
+          # "Vion" is the iOS app target defined in vita3k/gui-ios/CMakeLists.txt.
+          SCHEME_NAME="Vion"
 
           echo "Compilation du scheme : $SCHEME_NAME"
 
@@ -106,18 +71,23 @@ jobs:
             -derivedDataPath derived_data \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY=""
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            DEVELOPMENT_TEAM=""
 
       - name: Package IPA
         run: |
-          APP_PATH=$(find derived_data -name "*.app" -type d | head -n 1)
+          APP_PATH=$(find derived_data -name "Vion.app" -type d | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(find derived_data -name "*.app" -type d | head -n 1)
+          fi
 
           if [ -z "$APP_PATH" ]; then
-            echo "Erreur : Aucun bundle .app n'a été produit."
+            echo "Erreur : Aucun bundle .app n'a ete produit."
             exit 1
           fi
 
-          echo "Bundle trouvé : $APP_PATH"
+          echo "Bundle trouve : $APP_PATH"
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
           zip -r Vion.ipa Payload
