@@ -1,4 +1,4 @@
-name: Build Vion iOS
+name: Build Vion iOS (.deb)
 
 on:
   workflow_dispatch:
@@ -95,7 +95,17 @@ jobs:
             CODE_SIGN_ENTITLEMENTS="" \
             DEVELOPMENT_TEAM=""
 
-      - name: Package IPA
+      - name: Install packaging tools
+        run: |
+          # dpkg-deb builds the .deb; ldid ad-hoc "fake-signs" the binary so
+          # it has a valid Mach-O signature load command. A jailbroken
+          # device doesn't enforce AMFI/code-signing validation the way a
+          # normal iOS install does, but the binary still needs *a*
+          # signature (even a bogus one) to load at all - a real Apple
+          # developer certificate is not required.
+          brew install dpkg ldid
+
+      - name: Package .deb
         run: |
           APP_PATH=$(find derived_data -name "Vion.app" -type d | head -n 1)
           if [ -z "$APP_PATH" ]; then
@@ -108,14 +118,54 @@ jobs:
           fi
 
           echo "Bundle trouve : $APP_PATH"
-          mkdir -p Payload
-          cp -R "$APP_PATH" Payload/
-          zip -r Vion.ipa Payload
-          rm -rf Payload
 
-      - name: Upload IPA Artifact
+          PKG_ID="com.antique.vion"
+          PKG_VERSION="1.0"
+          STAGE_DIR="deb-root"
+
+          rm -rf "$STAGE_DIR"
+          mkdir -p "$STAGE_DIR/DEBIAN" "$STAGE_DIR/Applications"
+          cp -R "$APP_PATH" "$STAGE_DIR/Applications/Vion.app"
+
+          # Ad-hoc sign the main executable (and any embedded frameworks)
+          # so the Mach-O signature load command is present.
+          ldid -S "$STAGE_DIR/Applications/Vion.app/Vion"
+          find "$STAGE_DIR/Applications/Vion.app/Frameworks" -maxdepth 1 -name "*.framework" -type d 2>/dev/null | while read -r framework; do
+            fw_name=$(basename "$framework" .framework)
+            if [ -f "$framework/$fw_name" ]; then
+              ldid -S "$framework/$fw_name"
+            fi
+          done
+
+          cat > "$STAGE_DIR/DEBIAN/control" <<EOF
+Package: $PKG_ID
+Name: Vion
+Version: $PKG_VERSION
+Architecture: iphoneos-arm64
+Description: Vion (Vita3K-based PS Vita emulator) for jailbroken iOS
+Maintainer: Vion
+Section: Applications
+Depends: firmware (>= 16.0)
+EOF
+
+          # Registers the app icon/springboard entry after install, and
+          # removes it on uninstall. uicache ships with Sileo/Zebra on
+          # jailbroken devices.
+          cat > "$STAGE_DIR/DEBIAN/postinst" <<'EOF'
+#!/bin/sh
+uicache -p /Applications/Vion.app || true
+EOF
+          cat > "$STAGE_DIR/DEBIAN/postrm" <<'EOF'
+#!/bin/sh
+uicache -u /Applications/Vion.app || true
+EOF
+          chmod 755 "$STAGE_DIR/DEBIAN/postinst" "$STAGE_DIR/DEBIAN/postrm"
+
+          dpkg-deb --root-owner-group --build "$STAGE_DIR" Vion.deb
+
+      - name: Upload .deb Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Vion-iOS-IPA
-          path: Vion.ipa
+          name: Vion-iOS-deb
+          path: Vion.deb
           retention-days: 7
