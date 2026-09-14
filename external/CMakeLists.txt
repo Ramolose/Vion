@@ -141,6 +141,18 @@ if(APPLE AND IOS)
 	set(UNICORN_ARCH "arm" CACHE STRING "" FORCE)
 	set(UNICORN_INTERPRETER ON)
 	add_subdirectory(unicorn EXCLUDE_FROM_ALL)
+
+	# unicorn/qemu/include/qemu/int128.h only guards its struct-based Int128
+	# fallback (which redefines __int128_t) against MSVC+clang-cl; it doesn't
+	# account for plain Apple Clang, which natively provides __int128_t on
+	# arm64. That causes "typedef redefinition with different types". Defining
+	# CONFIG_INT128 switches int128.h to the native-__int128 path instead,
+	# which is both correct and faster on this target.
+	foreach(unicorn_target IN ITEMS unicorn unicorn-common arm-softmmu)
+		if(TARGET ${unicorn_target})
+			target_compile_definitions(${unicorn_target} PRIVATE CONFIG_INT128)
+		endif()
+	endforeach()
 endif()
 
 if(MSVC)
