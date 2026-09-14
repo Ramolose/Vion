@@ -133,7 +133,12 @@ add_subdirectory(dynarmic)
 
 if(APPLE AND IOS)
 	set(BUILD_SHARED_LIBS OFF)
-	set(UNICORN_ARCH "arm")
+	# unicorn's own CMakeLists.txt declares UNICORN_ARCH as a CACHE STRING (default:
+	# every architecture, including x86, which fails to cross-compile for iOS/arm64).
+	# A plain set() here would be wiped out when unicorn's set(... CACHE ...) runs
+	# (CMP0126 defaults to OLD for a project capped at cmake_minimum_required 3.20),
+	# so pre-seed the cache entry directly with FORCE.
+	set(UNICORN_ARCH "arm" CACHE STRING "" FORCE)
 	set(UNICORN_INTERPRETER ON)
 	add_subdirectory(unicorn EXCLUDE_FROM_ALL)
 endif()
