@@ -148,9 +148,17 @@ if(APPLE AND IOS)
 	# arm64. That causes "typedef redefinition with different types". Defining
 	# CONFIG_INT128 switches int128.h to the native-__int128 path instead,
 	# which is both correct and faster on this target.
+	# This CMake port of unicorn never defines the CONFIG_POSIX /
+	# CONFIG_POSIX_MEMALIGN macros that upstream QEMU's autoconf-generated
+	# build normally sets. Without them, qemu/util/oslib-posix.c's guards
+	# (`#ifdef CONFIG_POSIX` around <sys/mman.h> in osdep.h, and the
+	# posix_memalign()/memalign() choice) fall through to declarations that
+	# don't exist on iOS (mmap, mprotect, MAP_*/PROT_*, memalign), i.e.
+	# "use of undeclared identifier 'MAP_FAILED'" etc. iOS is POSIX and
+	# provides posix_memalign natively, so both macros are correct here.
 	foreach(unicorn_target IN ITEMS unicorn unicorn-common arm-softmmu)
 		if(TARGET ${unicorn_target})
-			target_compile_definitions(${unicorn_target} PRIVATE CONFIG_INT128)
+			target_compile_definitions(${unicorn_target} PRIVATE CONFIG_INT128 CONFIG_POSIX CONFIG_POSIX_MEMALIGN)
 		endif()
 	endforeach()
 endif()
