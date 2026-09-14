@@ -161,6 +161,22 @@ if(APPLE AND IOS)
 		endif()
 	endif()
 
+	# qemu/configure's Apple Silicon JIT probe only tests whether
+	# pthread_jit_write_protect_SUPPORTED_np() compiles, which iOS's SDK
+	# still declares - so it sets HAVE_PTHREAD_JIT_PROTECT=y on iOS too.
+	# But qemu/include/tcg/tcg-apple-jit.h gates its use of the actual
+	# writer, pthread_jit_write_protect_np(), on that same macro, and that
+	# function is explicitly unavailable on iOS ("not available on iOS"),
+	# since iOS disallows toggling JIT page protection from user code
+	# entirely. Strip the (incorrect, for iOS) define from the generated
+	# config-host.h so that code path compiles out instead.
+	set(_qemu_config_host_h "${CMAKE_BINARY_DIR}/config-host.h")
+	if(EXISTS "${_qemu_config_host_h}")
+		file(READ "${_qemu_config_host_h}" _qemu_config_host_h_content)
+		string(REGEX REPLACE "#define HAVE_PTHREAD_JIT_PROTECT[^\n]*\n" "" _qemu_config_host_h_content "${_qemu_config_host_h_content}")
+		file(WRITE "${_qemu_config_host_h}" "${_qemu_config_host_h_content}")
+	endif()
+
 	# unicorn/qemu/include/qemu/int128.h only guards its struct-based Int128
 	# fallback (which redefines __int128_t) against MSVC+clang-cl; it doesn't
 	# account for plain Apple Clang, which natively provides __int128_t on
